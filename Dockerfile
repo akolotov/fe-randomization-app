@@ -2,8 +2,9 @@ FROM python:3.8.8
 
 WORKDIR /code
 
-RUN apt-get update
-RUN apt install -y libgl1-mesa-glx
+RUN apt-get update && \
+    apt install -y libgl1-mesa-glx && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip
 
