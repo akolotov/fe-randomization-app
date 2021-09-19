@@ -14,4 +14,4 @@ RUN pip install -r requirements.txt
 COPY app.py .
 COPY templates ./templates
 
-ENTRYPOINT [ "gunicorn", "-w", "2", "app:app" ]
+ENTRYPOINT [ "gunicorn", "app:app" ]
