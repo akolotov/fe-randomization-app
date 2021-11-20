@@ -245,10 +245,32 @@ def generate_layout(layout_type='qualification', direction='cw'):
         r1 = 0
         r2 = 0
         r3 = 0
-        while (r1 == r2) or (r2 == r3) or (r1 == r3):
+        four_or_six = False
+        while (r1 == r2) or (r2 == r3) or (r1 == r3) or four_or_six:
             r1 = randint(0, len(obstacles_sets)-1)
             r2 = randint(0, len(obstacles_sets)-1)
             r3 = randint(0, len(obstacles_sets)-1)
+            obstacles_amount = 0
+            inner_amount = 0
+            outer_amount = 0
+            four_or_six = False
+            for one_obstacles_set in [obstacles_sets[mandatory_obstacles_set],
+                                      obstacles_sets[r1],
+                                      obstacles_sets[r2],
+                                      obstacles_sets[r3]
+                                     ]:
+                obstacles_amount = obstacles_amount + len(one_obstacles_set)
+                for one_obstacle in one_obstacles_set:
+                    if one_obstacle < 3:
+                        inner_amount = inner_amount + 1
+                    else:
+                        outer_amount = outer_amount + 1
+            
+            if (obstacles_amount != 4) and (obstacles_amount != 6):
+                four_or_six = True
+            if inner_amount != outer_amount:
+                four_or_six = True
+
         
         m = randint(0,3)
         if m == 0:
