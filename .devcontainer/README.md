@@ -41,4 +41,4 @@ You may encounter issues when trying to perform Git operations from the terminal
     git config --global user.email "your.email@example.com"
     ```
 
-Replace "Your Name" and "your.email@example.com" with your actual name and email associated with your GitHub account.
+Replace "Your Name" and "`your.email@example.com`" with your actual name and email associated with your GitHub account.
