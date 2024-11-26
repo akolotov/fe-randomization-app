@@ -10,8 +10,8 @@ env:
   IMAGE_NAME: ghcr.io/World-Robot-Olympiad-Association/fe-randomization-app
 
 jobs:
-  build-bot:
-    name: Bot docker image
+  build-app:
+    name: App docker image
     runs-on: ubuntu-latest
     permissions:
       contents: read
