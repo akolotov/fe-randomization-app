@@ -337,6 +337,25 @@ class StartZone(Enum):
     Z5 = (Intersection.TopMiddle, Intersection.T3)
     Z6 = (Intersection.TopLeft, Intersection.X2)
 
+# Intersections that will be in front of the vehicle for the given direction
+# and the given start zone.
+# Direction clockwise:
+#   Z3: T1, T3
+#   Z4: X1, X2
+# Direction counter-clockwise:
+#   Z3: X1, X2
+#   Z4: T2, T4
+forbidden_intersections_in_start_zone = {
+    Direction.CW: {
+        StartZone.Z3: [Intersection.T1, Intersection.T3],
+        StartZone.Z4: [Intersection.X1, Intersection.X2]
+    },
+    Direction.CCW: {
+        StartZone.Z3: [Intersection.X1, Intersection.X2],
+        StartZone.Z4: [Intersection.T2, Intersection.T4]
+    }
+}
+
 class VehiclePosition:
     """
     Represents a vehicle starting position on the game mat.
@@ -448,22 +467,73 @@ class InnerWall:
         img[h_n-(border//2)+border:h_s+(border//2)+border,w_e-(border//2)+border:w_e+(border//2)+border] = (0,0,0)
 
 # Randomization process operates with sets of obstacles.
-# Each element of the list defines relative positions of the obstacles in the straightforward section.
+# Each element of the list defines relative positions of the obstacles in the
+# straightforward section.
+# The duplicates for Card 14, 15, 20, 21 are removed to have results more valuable
+# from evaluation point of view.
 obstacles_sets = [
-    [Obstacle(Intersection.T1, Color.UNDEFINED)],                                             # 0, T1
-    [Obstacle(Intersection.X1, Color.UNDEFINED)],                                             # 1, X1
-    [Obstacle(Intersection.T2, Color.UNDEFINED)],                                             # 2, T2
-    [Obstacle(Intersection.T1, Color.UNDEFINED), Obstacle(Intersection.T2, Color.UNDEFINED)], # 3, T1, T2
-    [Obstacle(Intersection.T3, Color.UNDEFINED)],                                             # 4, T3
-    [Obstacle(Intersection.X2, Color.UNDEFINED)],                                             # 5, X2
-    [Obstacle(Intersection.T3, Color.UNDEFINED), Obstacle(Intersection.T4, Color.UNDEFINED)], # 6, T3, T4
-    [Obstacle(Intersection.T1, Color.UNDEFINED), Obstacle(Intersection.T4, Color.UNDEFINED)], # 7, T1, T4
-    [Obstacle(Intersection.T2, Color.UNDEFINED), Obstacle(Intersection.T3, Color.UNDEFINED)], # 8, T2, T3
-    []      # 9, empty
+    # Single intersection obstacles (T1)
+    [Obstacle(Intersection.T1, Color.GREEN)],                                         # 0, Card 1
+    [Obstacle(Intersection.T1, Color.RED)],                                           # 1, Card 2
+    
+    # Single intersection obstacles (X1)
+    [Obstacle(Intersection.X1, Color.GREEN)],                                         # 2, Card 3
+    [Obstacle(Intersection.X1, Color.RED)],                                           # 3, Card 4
+    
+    # Single intersection obstacles (T2)
+    [Obstacle(Intersection.T2, Color.GREEN)],                                         # 4, Card 5
+    [Obstacle(Intersection.T2, Color.RED)],                                           # 5, Card 6
+    
+    # Single intersection obstacles (T3)
+    [Obstacle(Intersection.T3, Color.GREEN)],                                         # 6, Card 7
+    [Obstacle(Intersection.T3, Color.RED)],                                           # 7, Card 8
+    
+    # Single intersection obstacles (X2)
+    [Obstacle(Intersection.X2, Color.GREEN)],                                         # 8, Card 9
+    [Obstacle(Intersection.X2, Color.RED)],                                           # 9, Card 10
+    
+    # Single intersection obstacles (T4)
+    [Obstacle(Intersection.T4, Color.GREEN)],                                         # 10, Card 11
+    [Obstacle(Intersection.T4, Color.RED)],                                           # 11, Card 12
+    
+    # T3 and T2 combinations
+    [Obstacle(Intersection.T3, Color.GREEN), Obstacle(Intersection.T2, Color.GREEN)], # 12, Card 13
+    [Obstacle(Intersection.T3, Color.GREEN), Obstacle(Intersection.T2, Color.RED)],   # 13, Card 14/16
+    [Obstacle(Intersection.T3, Color.RED), Obstacle(Intersection.T2, Color.GREEN)],   # 14, Card 15/17
+    [Obstacle(Intersection.T3, Color.RED), Obstacle(Intersection.T2, Color.RED)],     # 15, Card 18
+    
+    # T1 and T4 combinations
+    [Obstacle(Intersection.T1, Color.GREEN), Obstacle(Intersection.T4, Color.GREEN)], # 16, Card 19
+    [Obstacle(Intersection.T1, Color.GREEN), Obstacle(Intersection.T4, Color.RED)],   # 17, Card 20/22
+    [Obstacle(Intersection.T1, Color.RED), Obstacle(Intersection.T4, Color.GREEN)],   # 18, Card 21/23
+    [Obstacle(Intersection.T1, Color.RED), Obstacle(Intersection.T4, Color.RED)],     # 19, Card 24
+    
+    # T1 and T2 combinations
+    [Obstacle(Intersection.T1, Color.GREEN), Obstacle(Intersection.T2, Color.GREEN)], # 20, Card 25
+    [Obstacle(Intersection.T1, Color.GREEN), Obstacle(Intersection.T2, Color.RED)],   # 21, Card 26
+    [Obstacle(Intersection.T1, Color.RED), Obstacle(Intersection.T2, Color.GREEN)],   # 22, Card 27
+    [Obstacle(Intersection.T1, Color.GREEN), Obstacle(Intersection.T2, Color.RED)],   # 23, Card 28
+    [Obstacle(Intersection.T1, Color.RED), Obstacle(Intersection.T2, Color.GREEN)],   # 24, Card 29
+    [Obstacle(Intersection.T1, Color.RED), Obstacle(Intersection.T2, Color.RED)],     # 25, Card 30
+    
+    # T3 and T4 combinations
+    [Obstacle(Intersection.T3, Color.GREEN), Obstacle(Intersection.T4, Color.GREEN)], # 26, Card 31
+    [Obstacle(Intersection.T3, Color.GREEN), Obstacle(Intersection.T4, Color.RED)],   # 27, Card 32
+    [Obstacle(Intersection.T3, Color.RED), Obstacle(Intersection.T4, Color.GREEN)],   # 28, Card 33
+    [Obstacle(Intersection.T3, Color.GREEN), Obstacle(Intersection.T4, Color.RED)],   # 29, Card 34
+    [Obstacle(Intersection.T3, Color.RED), Obstacle(Intersection.T4, Color.GREEN)],   # 30, Card 35
+    [Obstacle(Intersection.T3, Color.RED), Obstacle(Intersection.T4, Color.RED)],     # 31, Card 36
 ]
 # The randomization process says that at least one of the straightforward sections must
-# have at least one obstacle in the intersection labeled as "X2".
-mandatory_obstacles_set = 5
+# have at least one obstacle in the intersection labeled as "X2". The map contains indices
+# of the corresponding obstacle sets for the green and red obstacles.
+mandatory_obstacles_sets = {
+    Color.GREEN: 8,
+    Color.RED: 9
+}
+# One of the obstacles sets from this list must be present on the game field to
+# make to reduce risk when incomplete solutions solve the challenge.
+required_obstacles_sets = [ 21, 22, 27, 28 ]
 
 # Relative coordinates of the vehicle starting zones in the straightforward sections 
 # for the Open challenge rounds.
@@ -527,27 +597,14 @@ template[(height//2)-(thin_line//2)+border:(height//2)+(thin_line//2)+border,bor
 # The line representing the central radius of the "Section E"
 template[(height//2)-(thin_line//2)+border:(height//2)+(thin_line//2)+border,width-inner_border+border:width+border] = (0,0,0)
 
-def draw_obstacles_set(img, f, s, o):
+def draw_obstacles_set(img, section: Section, obstacles_set: list[Obstacle]):
     """
-    Draw a set of obstacles defined by the elements of the obstacles set `s`
-    in the straightforward section defined by the given function `f`.
-    `o` contains the driving direction of the vehicle.
-
-    In the season 2021 it was assumed that the obstacle closer to the central section
-    is green and the one further from the central section is red for the clockwise direction.
-    For the counterclockwise direction the situation is opposite.
+    Draw a set of obstacles defined by the elements of the obstacles set `obstacles_set`
+    in the straightforward section defined by the given function `section`.
     """
 
-    closer_color = Color.GREEN if Direction.is_cw(o) else Color.RED
-    further_color = Color.RED if Direction.is_cw(o) else Color.GREEN
-    
-    for obstacle in s:
-        if (obstacle.position in [Intersection.T1, Intersection.T2, Intersection.X1]):
-            obstacle.set_color(closer_color)
-        else: 
-            obstacle.set_color(further_color)
-
-        obstacle.draw(img, f)
+    for obstacle in obstacles_set:
+        obstacle.draw(img, section)
 
 def draw_narrow(img, direction: Direction):
     """
@@ -580,16 +637,15 @@ def draw_narrow(img, direction: Direction):
 
 def draw_scheme_for_final(scheme):
     """
-    Draw the game mat for the Obstacle challenge rounds.
+    Draw the game field for the Obstacle challenge rounds.
 
     The scheme is a dictionary with the following keys:
     - start_section: the straightforward section where the starting zone is located
     - start_zone: the position of the starting zone in the chosen straightforward section
-    - driving_direction: the challenge driving direction
-    - obstacles_on_north: the set of obstacles in the Section N
-    - obstacles_on_west: the set of obstacles in the Section W
-    - obstacles_on_south: the set of obstacles in the Section S
-    - obstacles_on_east: the set of obstacles in the Section E
+    - obstacles: a dictionary where keys are indices of the obstacles sets and values are sections where the obstacles are located
+
+    Returns a 3-dimensional NumPy array (matrix) representing the game field where
+    every pixel is represented by three numbers corresponding to the BGR color.
     """
 
     image = template.copy()
@@ -597,26 +653,19 @@ def draw_scheme_for_final(scheme):
     # Create the vehicle starting position object for the given zone
     # and draw it in the chosen straightforward section
     VehiclePosition(scheme['start_zone']).draw(image, scheme['start_section'])
-    
-    direction = scheme['driving_direction']    
-    section_north = scheme['obstacles_on_north']
-    section_west = scheme['obstacles_on_west']
-    section_south = scheme['obstacles_on_south']
-    section_east = scheme['obstacles_on_east']
-    
+
     # Draw the obstacles in the corresponding sections
-    draw_obstacles_set(image, Section.NORTH, section_north, direction)
-    draw_obstacles_set(image, Section.WEST, section_west, direction)
-    draw_obstacles_set(image, Section.SOUTH, section_south, direction)
-    draw_obstacles_set(image, Section.EAST, section_east, direction)
+    obstacles_configuration = scheme['obstacles']
+    for obstacles_set_index in obstacles_configuration:
+        draw_obstacles_set(image, obstacles_configuration[obstacles_set_index], obstacles_sets[obstacles_set_index])
 
     return image
 
 def randomize_and_draw_layout_for_open(direction: Direction) -> np.ndarray:
     """
-    Generate the game mat for the Open challenge rounds.
+    Generate the game field for the Open challenge rounds.
 
-    Returns a 3-dimensional NumPy array (matrix) representing the game mat where
+    Returns a 3-dimensional NumPy array (matrix) representing the game field where
     every pixel is represented by three numbers corresponding to the BGR color.
     """
 
@@ -658,99 +707,100 @@ def randomize_and_draw_layout_for_open(direction: Direction) -> np.ndarray:
         
 def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
     """
-    Generate the game mat for the Obstacle challenge rounds.
+    Generate the game field for the Obstacle challenge rounds.
 
-    Returns a 3-dimensional NumPy array (matrix) representing the game mat where
+    Returns a 3-dimensional NumPy array (matrix) representing the game field where
     every pixel is represented by three numbers corresponding to the BGR color.
     """
 
-    r1 = 0
-    r2 = 0
-    r3 = 0
-    four_or_six = False
-    # The proecess to choose the obstacles sets for the straightforward sections
-    # must be repeated until the following conditions are met:
-    # - all three chosen sets are different
-    # - number of obstacles closer to the central section equals
-    #   number of the obstacles closer to the outer walls
-    # - total number of obstacles is 4 or 6
-    while (r1 == r2) or (r2 == r3) or (r1 == r3) or four_or_six:
-        # Choose the indces in the obstacle sets for three straightforward sections.
-        r1 = randint(0, len(obstacles_sets)-1)
-        r2 = randint(0, len(obstacles_sets)-1)
-        r3 = randint(0, len(obstacles_sets)-1)
-
-        # With the chosen obstacles sets and the mandatory set calculate the total
-        # number of obstacles, the number of obstacles that are closer to the
-        # central section and the number of obstacles that are closer to the outer
-        # walls.
-        obstacles_amount = 0
-        inner_amount = 0
-        outer_amount = 0
-        for one_obstacles_set in [obstacles_sets[mandatory_obstacles_set],
-                                    obstacles_sets[r1],
-                                    obstacles_sets[r2],
-                                    obstacles_sets[r3]
-                                    ]:
-            obstacles_amount = obstacles_amount + len(one_obstacles_set)
-            for one_obstacle in one_obstacles_set:
-                if one_obstacle.position in [Intersection.T1, Intersection.T2, Intersection.X1]:
-                    inner_amount = inner_amount + 1
-                else:
-                    outer_amount = outer_amount + 1
-        
-        # Although the randomiziation process allows completely random sets of
-        # obstacles, it makes sense to consider only the cases that are worth
-        # to evaluate solutions of the participants:
-        # - number of obstacles closer to the central section equals
-        #   to amount of the obstacles closer to the outer walls
-        # - total number of obstacles is not 2
-        four_or_six = False
-        if (obstacles_amount != 4) and (obstacles_amount != 6):
-            four_or_six = True
-        if inner_amount != outer_amount:
-            four_or_six = True
-    
-    # Choose the straightforward section where the mandatory set of obstacles is located.
-    m = randint(0,3)
-
-    # Create the list of obstacles sets for the straightforward sections.
-    if m == 0:
-        obs_sets = [obstacles_sets[mandatory_obstacles_set],
-                    obstacles_sets[r1],
-                    obstacles_sets[r2],
-                    obstacles_sets[r3]
-                    ]
-    elif m == 1:
-        obs_sets = [obstacles_sets[r1],
-                    obstacles_sets[mandatory_obstacles_set],
-                    obstacles_sets[r2],
-                    obstacles_sets[r3]
-                    ]
-    elif m == 2:
-        obs_sets = [obstacles_sets[r1],
-                    obstacles_sets[r2],
-                    obstacles_sets[mandatory_obstacles_set],
-                    obstacles_sets[r3]
-                    ]
-    elif m == 3:
-        obs_sets = [obstacles_sets[r1],
-                    obstacles_sets[r2],
-                    obstacles_sets[r3],
-                    obstacles_sets[mandatory_obstacles_set]
-                    ]
-    
     # Cannot use list(Section) because elements of Section are functions.
     sections = [Section.NORTH, Section.WEST, Section.SOUTH, Section.EAST]
 
+    # The set of intersections that will be in front of the vehicle in the start zone
+    # for the given driving direction.
+    forbidden_intersections = forbidden_intersections_in_start_zone[direction]
+
+    # Look for the obstacles sets that satisfy the conditions:
+    # - the difference between the number of green and red obstacles is not greater than one
+    # - the total number of obstacles is at least 5
+    # - there is at least one valid start zone for the given combination of obstacles
+    satisfied = False
+    while not satisfied:
+        # Choose the index of the mandatory obstacles set.
+        mandatory_set_color = choice([Color.GREEN, Color.RED])
+        mandatory_obstacles_set = mandatory_obstacles_sets[mandatory_set_color]
+
+        # Choose the index of the required obstacles set.
+        required_obstacles_set = choice(required_obstacles_sets)
+
+        # Choose the index of the obstacles set for one of two remaining sections.
+        os1 = mandatory_obstacles_set
+        while os1 == required_obstacles_set or os1 == mandatory_obstacles_set:
+            os1 = randint(0, len(obstacles_sets)-1)
+
+        # Choose the index of the obstacles set for the last remaining section.
+        os2 = mandatory_obstacles_set
+        while os2 == required_obstacles_set or os2 == mandatory_obstacles_set or os2 == os1:
+            os2 = randint(0, len(obstacles_sets)-1)
+
+        # Calculate the number of obstacles, the number of green and red obstacles and
+        # the forbidden start zones for choosen obstacles sets.
+        forbidden_start_zones = {}
+        obstacles_amount = 0
+        green_amount = 0
+        red_amount = 0
+        for obstacles_set_index in [mandatory_obstacles_set, required_obstacles_set, os1, os2]:
+            one_obstacles_set = obstacles_sets[obstacles_set_index]
+
+            obstacles_amount = obstacles_amount + len(one_obstacles_set)
+
+            forbidden_start_zones[obstacles_set_index] = set()
+            for one_obstacle in one_obstacles_set:
+                if one_obstacle.is_green():
+                    green_amount = green_amount + 1
+                elif one_obstacle.is_red():
+                    red_amount = red_amount + 1
+                else:
+                    raise ValueError("Unknown obstacle color")
+                
+                # Check if the current obstacle would be in front of the vehicle
+                # for each possible starting zone in this section
+                for zone in forbidden_intersections:
+                    if one_obstacle.position in forbidden_intersections[zone]:
+                        forbidden_start_zones[obstacles_set_index].add(zone)
+
+        # Remove obstacle sets where both possible start zones are forbidden, keeping
+        # only sets that have at least one valid start zone.
+        for obstacles_set_index in forbidden_start_zones:
+            if len(forbidden_start_zones[obstacles_set_index]) == 2:
+                del forbidden_start_zones[obstacles_set_index]
+
+        # Stops to look for the obstacles sets if the conditions are satisfied:
+        # - the difference between the number of green and red obstacles is not greater than one
+        # - the total number of obstacles is at least 5
+        # - there is at least one valid start zone for the given combination of obstacles
+        satisfied = False
+        if (abs(green_amount - red_amount) <= 1) and (obstacles_amount > 4) and len(forbidden_start_zones) > 0:
+            satisfied = True
+
+    # Randomly assign each obstacle set to a unique section of the game field
+    sections = sample(sections, 4)
+    sections_for_obstacles_sets = {}
+    for obstacles_set_index in [mandatory_obstacles_set, required_obstacles_set, os1, os2]:
+        sections_for_obstacles_sets[obstacles_set_index] = sections.pop()
+
+    # Choose one of the obstacle sets that has at least one valid start zone.
+    obstacles_set_in_start_section = choice(list(forbidden_start_zones.keys()))
+    # Choose the section where the chosen obstacle set is located.
+    start_section = sections_for_obstacles_sets[obstacles_set_in_start_section]
+
+    # Choose one of the valid start zones for the chosen obstacle set.
+    start_zone = choice(list(set([StartZone.Z3, StartZone.Z4]) - forbidden_start_zones[obstacles_set_in_start_section]))
+
     scheme = {
-        'start_section': choice(sections),
-        'start_zone': choice([StartZone.Z3, StartZone.Z4]),
-        'driving_direction': direction,
-        'obstacles_on_north': obs_sets[0],
-        'obstacles_on_west': obs_sets[1],
-        'obstacles_on_south': obs_sets[2],
-        'obstacles_on_east': obs_sets[3]
+        'start_section': start_section,
+        'start_zone': start_zone,
+        'obstacles': sections_for_obstacles_sets
     }
     image = draw_scheme_for_final(scheme)
 
@@ -758,7 +808,7 @@ def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
     InnerWall().draw(image)
     
     # Draw the narrow arc in the central section
-    draw_narrow(image, scheme['driving_direction'])
+    draw_narrow(image, direction)
 
     return image
 
