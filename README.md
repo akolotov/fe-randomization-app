@@ -1,4 +1,4 @@
-# WRO 2021 Future Engineers Randomization app
+# WRO 2022 Future Engineers Randomization app
 
 ## Run from CLI
 
