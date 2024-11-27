@@ -206,11 +206,17 @@ thin_line = 2
 # The presentation of the challenge driving direction is a narrow arc
 # in the central section of the game mat.
 narrow_radius = 350
-narrow_color = (255, 0, 0)
+narrow_color = (255, 0, 0) # The color is blue
 narrow_thickness = 20
 
-# The color to mark the starting zone
+# The color to mark the starting zone is grey
 start_section_color = (192, 192, 192)
+
+# The color of parking lot barriers is magenta
+parking_lot_color = (255, 0, 255)
+parking_barrier_thickness = 20
+parking_barrier_length = 200
+distance_between_parking_barriers = 300
 
 # The obstacle will be represented as a square with the side of 100 pixels.
 obstacle_size = 100
@@ -355,6 +361,14 @@ forbidden_intersections_in_start_zone = {
         StartZone.Z4: [Intersection.T2, Intersection.T4]
     }
 }
+
+# According to the rules, these intersections in the straightforward section containing
+# the parking lot cannot be used for the obstacle placement.
+forbidden_intersections_in_parking_section = [
+    Intersection.T3,
+    Intersection.T4,
+    Intersection.X2
+]
 
 class VehiclePosition:
     """
@@ -597,6 +611,45 @@ template[(height//2)-(thin_line//2)+border:(height//2)+(thin_line//2)+border,bor
 # The line representing the central radius of the "Section E"
 template[(height//2)-(thin_line//2)+border:(height//2)+(thin_line//2)+border,width-inner_border+border:width+border] = (0,0,0)
 
+def draw_parking_lot_barriers(img, section: Section):
+    """
+    Draw the parking lot barriers in the given section.
+    """
+    # coordinates of the top left corner of the first barrier relatively to the section:
+    first_barrier_top_left = (
+        left_position,  # x coordinate
+        0  # y coordinate - aligned with top edge
+    )
+
+    # coordinates of the bottom right corner of the first barrier relatively to the section:
+    first_barrier_bottom_right = (
+        left_position + parking_barrier_thickness,  # x coordinate 
+        parking_barrier_length  # y coordinate - extends down by barrier length
+    )
+
+    # coordinates of the top left corner of the second barrier relatively to the section:
+    second_barrier_top_left = (
+        left_position + parking_barrier_thickness + distance_between_parking_barriers,  # x coordinate
+        0  # y coordinate - aligned with top edge
+    )
+
+    # coordinates of the bottom right corner of the second barrier relatively to the section:
+    second_barrier_bottom_right = (
+        left_position + parking_barrier_thickness + distance_between_parking_barriers + parking_barrier_thickness,  # x coordinate
+        parking_barrier_length  # y coordinate - extends down by barrier length
+    )
+
+    # Draw both barriers
+    section(img, 
+        first_barrier_top_left[1], first_barrier_top_left[0],
+        first_barrier_bottom_right[1], first_barrier_bottom_right[0],
+        parking_lot_color)
+    
+    section(img,
+        second_barrier_top_left[1], second_barrier_top_left[0],
+        second_barrier_bottom_right[1], second_barrier_bottom_right[0],
+        parking_lot_color)
+
 def draw_obstacles_set(img, section: Section, obstacles_set: list[Obstacle]):
     """
     Draw a set of obstacles defined by the elements of the obstacles set `obstacles_set`
@@ -642,7 +695,9 @@ def draw_scheme_for_final(scheme):
     The scheme is a dictionary with the following keys:
     - start_section: the straightforward section where the starting zone is located
     - start_zone: the position of the starting zone in the chosen straightforward section
-    - obstacles: a dictionary where keys are indices of the obstacles sets and values are sections where the obstacles are located
+    - obstacles: a dictionary where keys are indices of the obstacles sets and values
+      are sections where the obstacles are located
+    - parking_section: the section where the parking lot is located
 
     Returns a 3-dimensional NumPy array (matrix) representing the game field where
     every pixel is represented by three numbers corresponding to the BGR color.
@@ -653,6 +708,9 @@ def draw_scheme_for_final(scheme):
     # Create the vehicle starting position object for the given zone
     # and draw it in the chosen straightforward section
     VehiclePosition(scheme['start_zone']).draw(image, scheme['start_section'])
+
+    # Draw the parking lot barriers in the parking section
+    draw_parking_lot_barriers(image, scheme['parking_section'])
 
     # Draw the obstacles in the corresponding sections
     obstacles_configuration = scheme['obstacles']
@@ -713,9 +771,6 @@ def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
     every pixel is represented by three numbers corresponding to the BGR color.
     """
 
-    # Cannot use list(Section) because elements of Section are functions.
-    sections = [Section.NORTH, Section.WEST, Section.SOUTH, Section.EAST]
-
     # The set of intersections that will be in front of the vehicle in the start zone
     # for the given driving direction.
     forbidden_intersections = forbidden_intersections_in_start_zone[direction]
@@ -743,13 +798,16 @@ def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
         while os2 == required_obstacles_set or os2 == mandatory_obstacles_set or os2 == os1:
             os2 = randint(0, len(obstacles_sets)-1)
 
+        chosen_obstacles_sets_indices = [mandatory_obstacles_set, required_obstacles_set, os1, os2]
+
         # Calculate the number of obstacles, the number of green and red obstacles and
         # the forbidden start zones for choosen obstacles sets.
         forbidden_start_zones = {}
+        obstacles_set_conflicting_with_parking_section = set()
         obstacles_amount = 0
         green_amount = 0
         red_amount = 0
-        for obstacles_set_index in [mandatory_obstacles_set, required_obstacles_set, os1, os2]:
+        for obstacles_set_index in chosen_obstacles_sets_indices:
             one_obstacles_set = obstacles_sets[obstacles_set_index]
 
             obstacles_amount = obstacles_amount + len(one_obstacles_set)
@@ -769,30 +827,50 @@ def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
                     if one_obstacle.position in forbidden_intersections[zone]:
                         forbidden_start_zones[obstacles_set_index].add(zone)
 
+                # Check if the current obstacle's position is suitable for the
+                # section where the parking lot is located.
+                for intersection in forbidden_intersections_in_parking_section:
+                    if one_obstacle.position == intersection:
+                        obstacles_set_conflicting_with_parking_section.add(obstacles_set_index)
+
         # Remove obstacle sets where both possible start zones are forbidden, keeping
         # only sets that have at least one valid start zone.
         for obstacles_set_index in forbidden_start_zones:
             if len(forbidden_start_zones[obstacles_set_index]) == 2:
                 del forbidden_start_zones[obstacles_set_index]
 
+        # Get all obstacle sets that are suitable for the parking section.
+        obstacles_set_suitable_for_parking_section = set(chosen_obstacles_sets_indices) - \
+            obstacles_set_conflicting_with_parking_section
+
         # Stops to look for the obstacles sets if the conditions are satisfied:
         # - the difference between the number of green and red obstacles is not greater than one
         # - the total number of obstacles is at least 5
         # - there is at least one valid start zone for the given combination of obstacles
-        satisfied = False
-        if (abs(green_amount - red_amount) <= 1) and (obstacles_amount > 4) and len(forbidden_start_zones) > 0:
-            satisfied = True
+        # - there is at least one obstacle set that is suitable for the parking section
+        satisfied = (abs(green_amount - red_amount) <= 1) and \
+            (obstacles_amount > 4) and \
+            (len(forbidden_start_zones) > 0) and \
+            (len(obstacles_set_suitable_for_parking_section) > 0)
+
+    # Cannot use list(Section) because elements of Section are functions.
+    sections = [Section.NORTH, Section.WEST, Section.SOUTH, Section.EAST]
 
     # Randomly assign each obstacle set to a unique section of the game field
-    sections = sample(sections, 4)
+    shuffled_sections = sample(sections, 4)
     sections_for_obstacles_sets = {}
-    for obstacles_set_index in [mandatory_obstacles_set, required_obstacles_set, os1, os2]:
-        sections_for_obstacles_sets[obstacles_set_index] = sections.pop()
+    for obstacles_set_index in chosen_obstacles_sets_indices:
+        sections_for_obstacles_sets[obstacles_set_index] = shuffled_sections.pop()
 
     # Choose one of the obstacle sets that has at least one valid start zone.
     obstacles_set_in_start_section = choice(list(forbidden_start_zones.keys()))
     # Choose the section where the chosen obstacle set is located.
     start_section = sections_for_obstacles_sets[obstacles_set_in_start_section]
+
+    # Choose one of the obstacle sets that is suitable for the parking section.
+    obstacles_set_in_parking_section = choice(list(obstacles_set_suitable_for_parking_section))
+    # Choose the section where the chosen obstacle set is located.
+    parking_section = sections_for_obstacles_sets[obstacles_set_in_parking_section]
 
     # Choose one of the valid start zones for the chosen obstacle set.
     start_zone = choice(list(set([StartZone.Z3, StartZone.Z4]) - forbidden_start_zones[obstacles_set_in_start_section]))
@@ -800,7 +878,8 @@ def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
     scheme = {
         'start_section': start_section,
         'start_zone': start_zone,
-        'obstacles': sections_for_obstacles_sets
+        'obstacles': sections_for_obstacles_sets,
+        'parking_section': parking_section
     }
     image = draw_scheme_for_final(scheme)
 
