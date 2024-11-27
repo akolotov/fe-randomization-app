@@ -1,4 +1,21 @@
-# WRO 2022 Future Engineers Randomization app
+# WRO 2024 Future Engineers Randomization app
+
+The web app simplifies the randomization process by preparing a picture with random layouts for both Open and Obstacle challenges:
+
+- For the Open Challenge
+  - the inner walls configuration
+  - the starting zone
+
+- For the Obstacle Challenge
+  - the obstacles positions
+  - the starting zone
+  - the parking lot section
+
+Examples of the pictures:
+
+| Open Challenge | Obstacle Challenge |
+|:----:|:----:|
+| ![image](https://github.com/user-attachments/assets/eab032fb-20b3-4eff-9d0a-32404de0ced8) | ![image](https://github.com/user-attachments/assets/937f0b5e-c089-4d7b-8c17-16c25cee9abc) |
 
 ## Run from CLI
 
