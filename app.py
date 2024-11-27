@@ -17,7 +17,8 @@ The type of the challenge as well as the challenge driving direction are defined
 from flask import Flask, make_response, render_template
 import cv2
 import numpy as np
-from random import randint, choice
+from random import randint, choice, sample
+from enum import Enum
 
 app = Flask(__name__)
 app.debug = True
@@ -139,14 +140,14 @@ In this schematic:
 
 **Labels for the Intersection Points**
 
-- Intersection points in the top row are labeled "T1", "X1", and "T2" from left to right.
-- Intersection points in the bottom row are labeled "T3", "X2", and "T4" from left to right.
+- Intersection points in the top row are labeled "T4", "X2", and "T3" from left to right.
+- Intersection points in the bottom row are labeled "T2", "X1", and "T1" from left to right.
 
 **Labels for the zones**
 
-- Zones in the top row are labeled "Z1" and "Z2"
-- Zones in the middle row are labeled "Z3" and "Z4"
-- Zones in the bottom row are labeled "Z5" and "Z6"
+- Zones in the top row are labeled "Z6" and "Z5"
+- Zones in the middle row are labeled "Z4" and "Z3"
+- Zones in the bottom row are labeled "Z2" and "Z1"
 
 ```
 +----+----+
@@ -196,7 +197,6 @@ middle_position = width // 2
 # The right radius is the right radius in the straightforward section.
 right_position = width - inner_border
 
-
 # Thickness of lines representing the walls
 border = 10
 
@@ -210,37 +210,255 @@ narrow_color = (255, 0, 0)
 narrow_thickness = 20
 
 # The color to mark the starting zone
-start_section = (192, 192, 192)
-
-# The color of the obstacles
-red_obstacle = (55,39,238)
-green_obstacle = (44, 214, 68)
-
-# The intersection points coordinates
-obstacles_coords = [
-    (second_line, right_position), # 0, T1
-    (second_line, middle_position), # 1, X1
-    (second_line, left_position), # 2, T2
-    (first_line, right_position), # 3, T3
-    (first_line, middle_position), # 4, X2
-    (first_line, left_position) # 5, T4
-]
+start_section_color = (192, 192, 192)
 
 # The obstacle will be represented as a square with the side of 100 pixels.
 obstacle_size = 100
 
+def on_north(img, h1, w1, h2, w2, c):
+    """
+    Draw a square with the given color and the given relative coordinates in the Section N
+    """
+
+    img[min(h1,h2)+border:max(h1,h2)+border, min(w1,w2)+border:max(w1,w2)+border] = c
+
+def on_south(img, h1, w1, h2, w2, c):
+    """
+    Draw a square with the given color and the given relative coordinates in the Section S
+    """
+
+    img[height-max(h1,h2)+border:height-min(h1,h2)+border, width-max(w1,w2)+border:width-min(w1,w2)+border] = c
+
+def on_west(img, h1, w1, h2, w2, c):
+    """
+    Draw a square with the given color and the given relative coordinates in the Section W
+    """
+
+    img[height-max(w1,w2)+border:height-min(w1,w2)+border, min(h1,h2)+border:max(h1,h2)+border] = c
+
+def on_east(img, h1, w1, h2, w2, c):
+    """
+    Draw a square with the given color and the given relative coordinates in the Section E
+    """
+
+    img[min(w1,w2)+border:max(w1,w2)+border, width-max(h1,h2)+border:width-min(h1,h2)+border] = c
+
+class Section(Enum):
+    """
+    Represents a straightforward section.
+
+    Value is a function to draw a square in the corresponding straightforward section.
+    """
+    NORTH = on_north
+    SOUTH = on_south
+    WEST = on_west
+    EAST = on_east
+
+class Direction(Enum):
+    CW = 'cw'
+    CCW = 'ccw'
+
+    @classmethod
+    def is_cw(cls, direction):
+        return direction == cls.CW
+    
+    @classmethod
+    def is_ccw(cls, direction):
+        return direction == cls.CCW
+
+class ChallengeType(Enum):
+    OPEN = 'open'
+    OBSTACLE = 'obstacle'
+
+# Intersection points in the straightforward sections
+class Intersection(Enum):
+    TopLeft = (0, left_position)
+    TopMiddle = (0, middle_position)
+    TopRight = (0, right_position)
+    T4 = (first_line, left_position)
+    X2 = (first_line, middle_position)
+    T3 = (first_line, right_position)
+    T2 = (second_line, left_position)
+    X1 = (second_line, middle_position)
+    T1 = (second_line, right_position)
+    BottomLeft = (inner_border, left_position)
+    BottomMiddle = (inner_border, middle_position)
+    BottomRight = (inner_border, right_position)
+
+class Color(Enum):
+    RED = (55,39,238)
+    GREEN = (44, 214, 68)
+    UNDEFINED = (0,0,0)
+
+class Obstacle:
+    """
+    Represents an obstacle on the game mat.
+
+    The obstacle is defined by the position and the color.
+    """
+
+    def __init__(self, position: Intersection, color: Color):
+        self.position = position
+        self.color = color
+
+    def set_color(self, color: Color):
+        self.color = color
+
+    def is_red(self):
+        return self.color == Color.RED
+
+    def is_green(self):
+        return self.color == Color.GREEN
+
+    def _x(self):
+        return self.position.value[0]
+
+    def _y(self):
+        return self.position.value[1]
+
+    def _color(self):
+        return self.color.value
+
+    def draw(self, img: np.ndarray, section: Section):
+        """
+        Draw a square obstacle in the straightforward section defined by the given function `section`
+        """
+
+        section(img,
+          self._x()-(obstacle_size//2), self._y()-(obstacle_size//2),
+          self._x()+(obstacle_size//2), self._y()+(obstacle_size//2),
+          self._color())
+
+class StartZone(Enum):
+    Z1 = (Intersection.X1, Intersection.BottomRight)
+    Z2 = (Intersection.T2, Intersection.BottomMiddle)
+    Z3 = (Intersection.X2, Intersection.T1)
+    Z4 = (Intersection.T4, Intersection.X1)
+    Z5 = (Intersection.TopMiddle, Intersection.T3)
+    Z6 = (Intersection.TopLeft, Intersection.X2)
+
+class VehiclePosition:
+    """
+    Represents a vehicle starting position on the game mat.
+    """
+
+    def __init__(self, start_zone: StartZone):
+        self.start_zone = start_zone
+
+    def _top_left_x(self):
+        return self.start_zone.value[0].value[0]
+
+    def _top_left_y(self):
+        return self.start_zone.value[0].value[1]
+
+    def _bottom_right_x(self):
+        return self.start_zone.value[1].value[0]
+
+    def _bottom_right_y(self):
+        return self.start_zone.value[1].value[1]
+
+    def draw(self, img: np.ndarray, section: Section):
+        """
+        Draw a vehicle starting zone in the straightforward section defined by the given function `section`
+        """
+
+        section(img,
+          self._top_left_x(), self._top_left_y(),
+          self._bottom_right_x(), self._bottom_right_y(),
+          start_section_color)
+
+class InnerWall:
+    """
+    Represents an inner wall on the game mat.
+    """
+
+    def __init__(self, sides: list[Section] = []):
+        self._north = Section.NORTH in sides
+        self._west = Section.WEST in sides
+        self._south = Section.SOUTH in sides
+        self._east = Section.EAST in sides
+
+    def on_north(self):
+        """
+        Check if the inner wall is closer to the outer wall on the northern side of the game mat.
+        """
+        return self._north
+
+    def on_west(self):
+        """
+        Check if the inner wall is closer to the outer wall on the western side of the game mat.
+        """
+        return self._west
+
+    def on_south(self):
+        """
+        Check if the inner wall is closer to the outer wall on the southern side of the game mat.
+        """
+        return self._south
+
+    def on_east(self):
+        """
+        Check if the inner wall is closer to the outer wall on the eastern side of the game mat.
+        """
+        return self._east
+    
+    def on_side(self, side: Section):
+        """
+        Check if the inner wall is closer to the outer wall on the given side of the game mat.
+        """
+        if side == Section.NORTH:
+            return self.on_north()
+        elif side == Section.WEST:
+            return self.on_west()
+        elif side == Section.SOUTH:
+            return self.on_south()
+        elif side == Section.EAST:
+            return self.on_east()
+
+    def draw(self, img: np.ndarray):
+        """
+        Draw the inner walls of the game mat.
+        """
+
+        # default position of the inner walls
+        h_n = inner_border # Y coordinate of the northern inner wall
+        w_w = inner_border # X coordinate of the western inner wall
+        h_s = height - inner_border # Y coordinate of the southern inner wall
+        w_e = width - inner_border # X coordinate of the eastern inner wall
+        
+        # Adjust the position of the inner walls based on which side of the game mat
+        # the inner wall should be drawn closer to the outer walls - the wall is
+        # positioned along the second arc of the corresponding straightforward section.
+        if self.on_north():
+            h_n = second_line
+        if self.on_west():
+            w_w = second_line
+        if self.on_south():
+            h_s = height - second_line
+        if self.on_east():
+            w_e = width - second_line
+
+        # north
+        img[h_n-(border//2)+border:h_n+(border//2)+border,w_w-(border//2)+border:w_e+(border//2)+border] = (0,0,0)
+        # west
+        img[h_n-(border//2)+border:h_s+(border//2)+border,w_w-(border//2)+border:w_w+(border//2)+border] = (0,0,0)
+        # south
+        img[h_s-(border//2)+border:h_s+(border//2)+border,w_w-(border//2)+border:w_e+(border//2)+border] = (0,0,0)
+        # east
+        img[h_n-(border//2)+border:h_s+(border//2)+border,w_e-(border//2)+border:w_e+(border//2)+border] = (0,0,0)
+
 # Randomization process operates with sets of obstacles.
 # Each element of the list defines relative positions of the obstacles in the straightforward section.
 obstacles_sets = [
-    [0],    # 0, T1
-    [1],    # 1, X1
-    [2],    # 2, T2
-    [0, 2], # 3, T1, T2
-    [3],    # 4, T3
-    [4],    # 5, X2
-    [3, 5], # 6, T3, T4
-    [0, 5], # 7, T1, T4
-    [2, 3], # 8, T2, T3
+    [Obstacle(Intersection.T1, Color.UNDEFINED)],                                             # 0, T1
+    [Obstacle(Intersection.X1, Color.UNDEFINED)],                                             # 1, X1
+    [Obstacle(Intersection.T2, Color.UNDEFINED)],                                             # 2, T2
+    [Obstacle(Intersection.T1, Color.UNDEFINED), Obstacle(Intersection.T2, Color.UNDEFINED)], # 3, T1, T2
+    [Obstacle(Intersection.T3, Color.UNDEFINED)],                                             # 4, T3
+    [Obstacle(Intersection.X2, Color.UNDEFINED)],                                             # 5, X2
+    [Obstacle(Intersection.T3, Color.UNDEFINED), Obstacle(Intersection.T4, Color.UNDEFINED)], # 6, T3, T4
+    [Obstacle(Intersection.T1, Color.UNDEFINED), Obstacle(Intersection.T4, Color.UNDEFINED)], # 7, T1, T4
+    [Obstacle(Intersection.T2, Color.UNDEFINED), Obstacle(Intersection.T3, Color.UNDEFINED)], # 8, T2, T3
     []      # 9, empty
 ]
 # The randomization process says that at least one of the straightforward sections must
@@ -249,24 +467,21 @@ mandatory_obstacles_set = 5
 
 # Relative coordinates of the vehicle starting zones in the straightforward sections 
 # for the Open challenge rounds.
-car_positions_in_qualif = [
-    ((0, left_position), (first_line, middle_position)),
-    ((0, middle_position), (first_line, right_position)),
-    ((first_line, left_position), (second_line, middle_position)),
-    ((first_line, middle_position), (second_line, right_position)),
-    ((second_line, left_position), (inner_border, middle_position)),
-    ((second_line, middle_position), (inner_border, right_position))    
+vehicle_positions_in_open = [
+    VehiclePosition(StartZone.Z6),
+    VehiclePosition(StartZone.Z5),
+    VehiclePosition(StartZone.Z4),
+    VehiclePosition(StartZone.Z3),
+    VehiclePosition(StartZone.Z2),
+    VehiclePosition(StartZone.Z1)
 ]
 
 # Relative coordinates of the vehicle starting zones in the straightforward sections 
 # for the Obstacle challenge rounds.
-car_positions_in_final = [
-    ((first_line, left_position), (second_line, middle_position)),
-    ((first_line, middle_position), (second_line, right_position))
+vehicle_positions_in_obstacle = [
+    VehiclePosition(StartZone.Z4),
+    VehiclePosition(StartZone.Z3)
 ]
-
-# The center of the game mat is calculated with taking into account the outer walls.
-img_center = (width // 2 + border, height // 2 + border)
 
 # game field image template
 template = np.zeros((height+border*2,width+border*2,3), np.uint8)
@@ -312,45 +527,6 @@ template[(height//2)-(thin_line//2)+border:(height//2)+(thin_line//2)+border,bor
 # The line representing the central radius of the "Section E"
 template[(height//2)-(thin_line//2)+border:(height//2)+(thin_line//2)+border,width-inner_border+border:width+border] = (0,0,0)
 
-def on_north(img, h1, w1, h2, w2, c):
-    """
-    Draw a square with the given color and the given relative coordinates in the Section N
-    """
-
-    img[min(h1,h2)+border:max(h1,h2)+border, min(w1,w2)+border:max(w1,w2)+border] = c
-
-def on_south(img, h1, w1, h2, w2, c):
-    """
-    Draw a square with the given color and the given relative coordinates in the Section S
-    """
-
-    img[height-max(h1,h2)+border:height-min(h1,h2)+border, width-max(w1,w2)+border:width-min(w1,w2)+border] = c
-
-def on_west(img, h1, w1, h2, w2, c):
-    """
-    Draw a square with the given color and the given relative coordinates in the Section W
-    """
-
-    img[height-max(w1,w2)+border:height-min(w1,w2)+border, min(h1,h2)+border:max(h1,h2)+border] = c
-
-def on_east(img, h1, w1, h2, w2, c):
-    """
-    Draw a square with the given color and the given relative coordinates in the Section E
-    """
-
-    img[min(w1,w2)+border:max(w1,w2)+border, width-max(h1,h2)+border:width-min(h1,h2)+border] = c
-
-def draw_obstacle(img, f, h, w, c):
-    """
-    Draw a square obstacle with the given color and the given relative coordinates
-    The the straightforward section for the obstacle is defined by the given function `f`
-    """
-
-    f(img,
-      h-(obstacle_size//2), w-(obstacle_size//2),
-      h+(obstacle_size//2), w+(obstacle_size//2),
-      c)
-
 def draw_obstacles_set(img, f, s, o):
     """
     Draw a set of obstacles defined by the elements of the obstacles set `s`
@@ -362,58 +538,25 @@ def draw_obstacles_set(img, f, s, o):
     For the counterclockwise direction the situation is opposite.
     """
 
-    closer_color = green_obstacle if o == 'cw' else red_obstacle
-    further_color = red_obstacle if o == 'cw' else green_obstacle
+    closer_color = Color.GREEN if Direction.is_cw(o) else Color.RED
+    further_color = Color.RED if Direction.is_cw(o) else Color.GREEN
     
     for obstacle in s:
-        if (obstacle < 3):
-            draw_obstacle(img, f, obstacles_coords[obstacle][0], obstacles_coords[obstacle][1], closer_color)
+        if (obstacle.position in [Intersection.T1, Intersection.T2, Intersection.X1]):
+            obstacle.set_color(closer_color)
         else: 
-            draw_obstacle(img, f, obstacles_coords[obstacle][0], obstacles_coords[obstacle][1], further_color)
+            obstacle.set_color(further_color)
 
-def draw_inner_walls(img, code):
-    """
-    Draw the inner walls of the game mat for the Open challenge rounds.
-    
-    The code is a string of four elements, each of which is either 0 or 1.
-    Each element corresponds to the inner wall of the corresponding side of the game mat.
-    The order of the elements is the following: north, west, south, east.
-    
-    If the element is 1, the inner wall is drawn closer to the outer wall.
-    """
+        obstacle.draw(img, f)
 
-    # default position of the inner walls
-    h_n = inner_border # Y coordinate of the northern inner wall
-    w_w = inner_border # X coordinate of the western inner wall
-    h_s = height - inner_border # Y coordinate of the southern inner wall
-    w_e = width - inner_border # X coordinate of the eastern inner wall
-    
-    # Adjust the position of the inner walls based on the code, so that the walls
-    # are drawn closer to the outer walls - the wall is positioned along the 
-    # second arc of the corresponding straightforward section.
-    if code[3] == '1':
-        h_n = second_line
-    if code[2] == '1':
-        w_w = second_line
-    if code[1] == '1':
-        h_s = height - second_line
-    if code[0] == '1':
-        w_e = width - second_line
-
-    # north
-    img[h_n-(border//2)+border:h_n+(border//2)+border,w_w-(border//2)+border:w_e+(border//2)+border] = (0,0,0)
-    # west
-    img[h_n-(border//2)+border:h_s+(border//2)+border,w_w-(border//2)+border:w_w+(border//2)+border] = (0,0,0)
-    # south
-    img[h_s-(border//2)+border:h_s+(border//2)+border,w_w-(border//2)+border:w_e+(border//2)+border] = (0,0,0)
-    # east
-    img[h_n-(border//2)+border:h_s+(border//2)+border,w_e-(border//2)+border:w_e+(border//2)+border] = (0,0,0)
-
-def draw_narrow(img, o):
+def draw_narrow(img, direction: Direction):
     """
     Draw the narrow arc in the central section of the game mat.
-    `o` contains the driving direction of the vehicle.
+    `direction` contains the driving direction of the vehicle.
     """
+
+    # The center of the game mat is calculated with taking into account the outer walls.
+    img_center = (width // 2 + border, height // 2 + border)
 
     axes = (narrow_radius, narrow_radius)
     startA = 180
@@ -422,13 +565,13 @@ def draw_narrow(img, o):
     img = cv2.ellipse(img, img_center, axes, 0, startA, endA, narrow_color, narrow_thickness)
 
     # Draw the arrow at the end of the arc
-    if o == 'cw':
+    if Direction.is_cw(direction):
         startP = (img_center[0] - narrow_radius, img_center[1])
         endP = (img_center[0] - narrow_radius - 30, img_center[1] + 80)
         img = cv2.line(img, startP, endP, narrow_color, narrow_thickness)
         endP = (img_center[0] - narrow_radius + 50, img_center[1] + 75)
         img = cv2.line(img, startP, endP, narrow_color, narrow_thickness)
-    elif o == 'ccw':
+    elif Direction.is_ccw(direction):
         startP = (img_center[0], img_center[1] - narrow_radius)
         endP = (img_center[0] + 80, img_center[1] - narrow_radius - 30)
         img = cv2.line(img, startP, endP, narrow_color, narrow_thickness)
@@ -440,8 +583,8 @@ def draw_scheme_for_final(scheme):
     Draw the game mat for the Obstacle challenge rounds.
 
     The scheme is a dictionary with the following keys:
-    - start_side: the straightforward section where the starting zone is located
-    - start_position: the position of the starting zone in the chosen straightforward section
+    - start_section: the straightforward section where the starting zone is located
+    - start_zone: the position of the starting zone in the chosen straightforward section
     - driving_direction: the challenge driving direction
     - obstacles_on_north: the set of obstacles in the Section N
     - obstacles_on_west: the set of obstacles in the Section W
@@ -451,192 +594,171 @@ def draw_scheme_for_final(scheme):
 
     image = template.copy()
         
-    car_pos = scheme['start_position']
-    car_side = scheme['start_side']
-
-    # Choose the function that corresponds to the starting section
-    # and call it to draw the starting zone within the section
-    f_list = [on_north, on_west, on_south, on_east]
-    f_list[car_side](image, 
-                     car_positions_in_final[car_pos][0][0], car_positions_in_final[car_pos][0][1], 
-                     car_positions_in_final[car_pos][1][0], car_positions_in_final[car_pos][1][1],
-                     start_section)
+    # Create the vehicle starting position object for the given zone
+    # and draw it in the chosen straightforward section
+    VehiclePosition(scheme['start_zone']).draw(image, scheme['start_section'])
     
-    direct = scheme['driving_direction']    
-    north = scheme['obstacles_on_north']
-    west = scheme['obstacles_on_west']
-    south = scheme['obstacles_on_south']
-    east = scheme['obstacles_on_east']
+    direction = scheme['driving_direction']    
+    section_north = scheme['obstacles_on_north']
+    section_west = scheme['obstacles_on_west']
+    section_south = scheme['obstacles_on_south']
+    section_east = scheme['obstacles_on_east']
     
     # Draw the obstacles in the corresponding sections
-    draw_obstacles_set(image, on_north, north, direct)
-    draw_obstacles_set(image, on_west, west, direct)
-    draw_obstacles_set(image, on_south, south, direct)
-    draw_obstacles_set(image, on_east, east, direct)
-
-    # Draw the inner walls
-    # Inner wall in the Section W
-    image[inner_border-(border//2)+border:height-inner_border+(border//2)+border,inner_border-(border//2)+border:inner_border+(border//2)+border] = (0,0,0)
-    # Inner wall in the Section E
-    image[inner_border-(border//2)+border:height-inner_border+(border//2)+border,width-inner_border-(border//2)+border:width-inner_border+(border//2)+border] = (0,0,0)
-    # Inner wall in the Section N
-    image[inner_border-(border//2)+border:inner_border+(border//2)+border,inner_border-(border//2)+border:width-inner_border+(border//2)+border] = (0,0,0)
-    # Inner wall in the Section S
-    image[height-inner_border-(border//2)+border:height-inner_border+(border//2)+border,inner_border-(border//2)+border:width-inner_border+(border//2)+border] = (0,0,0)
+    draw_obstacles_set(image, Section.NORTH, section_north, direction)
+    draw_obstacles_set(image, Section.WEST, section_west, direction)
+    draw_obstacles_set(image, Section.SOUTH, section_south, direction)
+    draw_obstacles_set(image, Section.EAST, section_east, direction)
 
     return image
 
-def generate_layout(layout_type='qualification', direction='cw'):
+def randomize_and_draw_layout_for_open(direction: Direction) -> np.ndarray:
     """
-    Generate the game mat for the qualification or final rounds.
+    Generate the game mat for the Open challenge rounds.
 
     Returns a 3-dimensional NumPy array (matrix) representing the game mat where
     every pixel is represented by three numbers corresponding to the BGR color.
     """
-    
-    if layout_type == 'qualification':
-        
-        # Since wall on each side could be either on the border with the central section
-        # or closer to the outer wall, there are 16 possible configurations.
-        walls_config = randint(0,15)
 
-        # Convert the number to the binary representation with the leading zeros so that
-        # it always has four elements. Example: 11 is 1011, 3 is 0011.
-        # The first element of the code string corresponds to the northern side,
-        # the second one to the western, the third one to the southern,
-        # and the fourth one to the eastern.
-        code = bin(walls_config)[2:]
-        code = '0' * (4 - len(code)) + code
-        
-        # Choose the straightforward section where the starting zone is located.
-        side = randint(0,3)
+    sections = [Section.NORTH, Section.WEST, Section.SOUTH, Section.EAST]
 
-        # If the inner wall in the starting section is closer to the outer wall,
-        # the starting zone could be only one of the four available zones in
-        # the starting section. That is why number of zones used for randomization
-        # must be limited.
+    # Choose on which sides of the game mat the inner walls should be drawn 
+    # closer to the outer walls.
+    inner_walls_config = sample(sections, randint(0, 4))
+    inner_walls = InnerWall(inner_walls_config)
 
-        # The elements in the string in the reverse order correspond to the sides
-        # of the game mat.
-        if code[3-side] == '1':
-            allowed_pos = 3
-        else:
-            allowed_pos = 5
-        # Choose the starting zone within the allowed positions.
-        car_pos = randint(0, allowed_pos)
+    # Choose the straightforward section where the starting zone is located.
+    starting_section = choice(sections)
 
-        image = template.copy()
+    # If the inner wall in the starting section is closer to the outer wall,
+    # the starting zone could be only one of the four available zones in
+    # the starting section. That is why number of zones used for randomization
+    # must be limited.
+    if inner_walls.on_side(starting_section):
+        allowed_zones = [StartZone.Z6, StartZone.Z5, StartZone.Z4, StartZone.Z3]
+    else:
+        allowed_zones = list(StartZone)
+    # Choose the starting zone within the allowed zones.
+    starting_zone = choice(allowed_zones)
 
-        # Choose the function that corresponds to the starting section
-        # and call it to draw the starting zone within the section
-        f_list = [on_north, on_west, on_south, on_east]
-        f_list[side](image, 
-                     car_positions_in_qualif[car_pos][0][0], car_positions_in_qualif[car_pos][0][1], 
-                     car_positions_in_qualif[car_pos][1][0], car_positions_in_qualif[car_pos][1][1],
-                     start_section)
+    image = template.copy()
 
-        draw_inner_walls(image, code)
+    # Create the vehicle starting position object for the given zone
+    # and draw it in the chosen straightforward section
+    VehiclePosition(starting_zone).draw(image, starting_section)
 
-        draw_narrow(image, direction)
+    # Draw the inner walls
+    inner_walls.draw(image)
 
-    elif layout_type == 'final':
-        
-        r1 = 0
-        r2 = 0
-        r3 = 0
-        four_or_six = False
-        # The proecess to choose the obstacles sets for the straightforward sections
-        # must be repeated until the following conditions are met:
-        # - all three chosen sets are different
-        # - number of obstacles closer to the central section equals
-        #   number of the obstacles closer to the outer walls
-        # - total number of obstacles is 4 or 6
-        while (r1 == r2) or (r2 == r3) or (r1 == r3) or four_or_six:
-            # Choose the indces in the obstacle sets for three straightforward sections.
-            r1 = randint(0, len(obstacles_sets)-1)
-            r2 = randint(0, len(obstacles_sets)-1)
-            r3 = randint(0, len(obstacles_sets)-1)
+    # Draw the narrow arc in the central section
+    draw_narrow(image, direction)
 
-            # With the chosen obstacles sets and the mandatory set calculate the total
-            # number of obstacles, the number of obstacles that are closer to the
-            # central section and the number of obstacles that are closer to the outer
-            # walls.
-            obstacles_amount = 0
-            inner_amount = 0
-            outer_amount = 0
-            for one_obstacles_set in [obstacles_sets[mandatory_obstacles_set],
-                                      obstacles_sets[r1],
-                                      obstacles_sets[r2],
-                                      obstacles_sets[r3]
-                                     ]:
-                obstacles_amount = obstacles_amount + len(one_obstacles_set)
-                for one_obstacle in one_obstacles_set:
-                    if one_obstacle < 3:
-                        inner_amount = inner_amount + 1
-                    else:
-                        outer_amount = outer_amount + 1
-            
-            # Although the randomiziation process allows completely random sets of
-            # obstacles, it makes sense to consider only the cases that are worth
-            # to evaluate solutions of the participants:
-            # - number of obstacles closer to the central section equals
-            #   to amount of the obstacles closer to the outer walls
-            # - total number of obstacles is not 2
-            four_or_six = False
-            if (obstacles_amount != 4) and (obstacles_amount != 6):
-                four_or_six = True
-            if inner_amount != outer_amount:
-                four_or_six = True
-        
-        # Choose the straightforward section where the mandatory set of obstacles is located.
-        m = randint(0,3)
-
-        # Create the list of obstacles sets for the straightforward sections.
-        if m == 0:
-            obs_sets = [obstacles_sets[mandatory_obstacles_set],
-                        obstacles_sets[r1],
-                        obstacles_sets[r2],
-                        obstacles_sets[r3]
-                       ]
-        elif m == 1:
-            obs_sets = [obstacles_sets[r1],
-                        obstacles_sets[mandatory_obstacles_set],
-                        obstacles_sets[r2],
-                        obstacles_sets[r3]
-                       ]
-        elif m == 2:
-            obs_sets = [obstacles_sets[r1],
-                        obstacles_sets[r2],
-                        obstacles_sets[mandatory_obstacles_set],
-                        obstacles_sets[r3]
-                       ]
-        elif m == 3:
-            obs_sets = [obstacles_sets[r1],
-                        obstacles_sets[r2],
-                        obstacles_sets[r3],
-                        obstacles_sets[mandatory_obstacles_set]
-                       ]
-        
-        # Choose the straightforward section where the starting zone is located.
-        side = randint(0, 3)
-        # Choose one of the two starting zones in the starting section.
-        sp = randint(0, 1)
-
-        scheme = {
-            'start_side': side,
-            'start_position': sp,
-            'driving_direction': direction,
-            'obstacles_on_north': obs_sets[0],
-            'obstacles_on_west': obs_sets[1],
-            'obstacles_on_south': obs_sets[2],
-            'obstacles_on_east': obs_sets[3]
-        }
-        image = draw_scheme_for_final(scheme)
-        
-        draw_narrow(image, scheme['driving_direction'])
-        
     return image
+        
+def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
+    """
+    Generate the game mat for the Obstacle challenge rounds.
 
+    Returns a 3-dimensional NumPy array (matrix) representing the game mat where
+    every pixel is represented by three numbers corresponding to the BGR color.
+    """
+
+    r1 = 0
+    r2 = 0
+    r3 = 0
+    four_or_six = False
+    # The proecess to choose the obstacles sets for the straightforward sections
+    # must be repeated until the following conditions are met:
+    # - all three chosen sets are different
+    # - number of obstacles closer to the central section equals
+    #   number of the obstacles closer to the outer walls
+    # - total number of obstacles is 4 or 6
+    while (r1 == r2) or (r2 == r3) or (r1 == r3) or four_or_six:
+        # Choose the indces in the obstacle sets for three straightforward sections.
+        r1 = randint(0, len(obstacles_sets)-1)
+        r2 = randint(0, len(obstacles_sets)-1)
+        r3 = randint(0, len(obstacles_sets)-1)
+
+        # With the chosen obstacles sets and the mandatory set calculate the total
+        # number of obstacles, the number of obstacles that are closer to the
+        # central section and the number of obstacles that are closer to the outer
+        # walls.
+        obstacles_amount = 0
+        inner_amount = 0
+        outer_amount = 0
+        for one_obstacles_set in [obstacles_sets[mandatory_obstacles_set],
+                                    obstacles_sets[r1],
+                                    obstacles_sets[r2],
+                                    obstacles_sets[r3]
+                                    ]:
+            obstacles_amount = obstacles_amount + len(one_obstacles_set)
+            for one_obstacle in one_obstacles_set:
+                if one_obstacle.position in [Intersection.T1, Intersection.T2, Intersection.X1]:
+                    inner_amount = inner_amount + 1
+                else:
+                    outer_amount = outer_amount + 1
+        
+        # Although the randomiziation process allows completely random sets of
+        # obstacles, it makes sense to consider only the cases that are worth
+        # to evaluate solutions of the participants:
+        # - number of obstacles closer to the central section equals
+        #   to amount of the obstacles closer to the outer walls
+        # - total number of obstacles is not 2
+        four_or_six = False
+        if (obstacles_amount != 4) and (obstacles_amount != 6):
+            four_or_six = True
+        if inner_amount != outer_amount:
+            four_or_six = True
+    
+    # Choose the straightforward section where the mandatory set of obstacles is located.
+    m = randint(0,3)
+
+    # Create the list of obstacles sets for the straightforward sections.
+    if m == 0:
+        obs_sets = [obstacles_sets[mandatory_obstacles_set],
+                    obstacles_sets[r1],
+                    obstacles_sets[r2],
+                    obstacles_sets[r3]
+                    ]
+    elif m == 1:
+        obs_sets = [obstacles_sets[r1],
+                    obstacles_sets[mandatory_obstacles_set],
+                    obstacles_sets[r2],
+                    obstacles_sets[r3]
+                    ]
+    elif m == 2:
+        obs_sets = [obstacles_sets[r1],
+                    obstacles_sets[r2],
+                    obstacles_sets[mandatory_obstacles_set],
+                    obstacles_sets[r3]
+                    ]
+    elif m == 3:
+        obs_sets = [obstacles_sets[r1],
+                    obstacles_sets[r2],
+                    obstacles_sets[r3],
+                    obstacles_sets[mandatory_obstacles_set]
+                    ]
+    
+    sections = [Section.NORTH, Section.WEST, Section.SOUTH, Section.EAST]
+
+    scheme = {
+        'start_section': choice(sections),
+        'start_zone': choice([StartZone.Z3, StartZone.Z4]),
+        'driving_direction': direction,
+        'obstacles_on_north': obs_sets[0],
+        'obstacles_on_west': obs_sets[1],
+        'obstacles_on_south': obs_sets[2],
+        'obstacles_on_east': obs_sets[3]
+    }
+    image = draw_scheme_for_final(scheme)
+
+    # Draw the inner walls
+    InnerWall().draw(image)
+    
+    # Draw the narrow arc in the central section
+    draw_narrow(image, scheme['driving_direction'])
+
+    return image
 
 #### HTTP Content related
 
@@ -661,25 +783,25 @@ def index():
 
 @app.route('/qualification/cw')
 def generate_qualification_cw():
-    layout = generate_layout()
+    layout = randomize_and_draw_layout_for_open(Direction.CW)
     response = generate_image(layout)
     return response
 
 @app.route('/qualification/ccw')
 def generate_qualification_ccw():
-    layout = generate_layout(direction='ccw')
+    layout = randomize_and_draw_layout_for_open(Direction.CCW)
     response = generate_image(layout)
     return response
 
 @app.route('/final/cw')
 def generate_final_cw():
-    layout = generate_layout(layout_type='final')
+    layout = randomize_and_draw_layout_for_obstacle(Direction.CW)
     response = generate_image(layout)
     return response
 
 @app.route('/final/ccw')
 def generate_final_ccw():
-    layout = generate_layout(layout_type='final', direction='ccw')
+    layout = randomize_and_draw_layout_for_obstacle(Direction.CCW)
     response = generate_image(layout)
     return response
 
