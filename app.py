@@ -620,6 +620,7 @@ def randomize_and_draw_layout_for_open(direction: Direction) -> np.ndarray:
     every pixel is represented by three numbers corresponding to the BGR color.
     """
 
+    # Cannot use list(Section) because elements of Section are functions.
     sections = [Section.NORTH, Section.WEST, Section.SOUTH, Section.EAST]
 
     # Choose on which sides of the game mat the inner walls should be drawn 
@@ -739,6 +740,7 @@ def randomize_and_draw_layout_for_obstacle(direction: Direction) -> np.ndarray:
                     obstacles_sets[mandatory_obstacles_set]
                     ]
     
+    # Cannot use list(Section) because elements of Section are functions.
     sections = [Section.NORTH, Section.WEST, Section.SOUTH, Section.EAST]
 
     scheme = {
